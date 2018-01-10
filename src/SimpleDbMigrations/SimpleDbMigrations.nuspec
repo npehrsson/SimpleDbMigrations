@@ -2,8 +2,8 @@
 <package >
   <metadata>
     <id>SimpleDbMigrations</id>
-    <version>$version$</version>
-    <title>$title$</title>
+    <version>1.0.0</version>
+    <title>SimpleDbMigrations</title>
     <authors>NPehrsson</authors>
     <owners>NPehrsson</owners>
     <!--<licenseUrl>http://LICENSE_URL_HERE_OR_DELETE_THIS_LINE</licenseUrl>-->
