@@ -22,10 +22,10 @@ build:
 
 before_package:
 - cmd: >-
-     msbuild /t:pack /p:VersionSuffix="%MARKDIG_VERSION_SUFFIX%" /p:Configuration=Release src/SimpleDbMigrations/SimpleDbMigrations.csproj
+     msbuild /t:pack /p:Configuration=Release src/SimpleDbMigrations/SimpleDbMigrations.csproj
 
 artifacts:
-  - path: 'src\*\*\*\*.nupkg'
+  - path: 'src\*\*\*\*\.nupkg'
 
 deploy:
   provider: NuGet
