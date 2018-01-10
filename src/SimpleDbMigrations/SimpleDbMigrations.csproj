@@ -6,6 +6,8 @@
     <Authors>NPehrsson</Authors>
     <Company />
     <Product />
+    <PackageProjectUrl>https://github.com/npehrsson/SimpleDbMigrations</PackageProjectUrl>
+    <PackageTags>SQL, Migrations</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
