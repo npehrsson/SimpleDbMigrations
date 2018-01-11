@@ -30,16 +30,6 @@ namespace SimpleDbMigrations
         private CachedDatabaseVersionTable VersionTable { get; }
         private IList<Migration> Migrations { get; }
 
-        public void LoadVersionInfo(IDbConnection connection)
-        {
-            var database = new MigratorDatabase(connection);
-
-            if (VersionTable.Exists(database))
-            {
-                VersionTable.GetCurrentVersion(database);
-            }
-        }
-
         public void Migrate(string connectionString)
         {
             using (var connection = new SqlConnection(connectionString))
@@ -82,8 +72,6 @@ namespace SimpleDbMigrations
                 foreach (var migration in migrations)
                 {
                     migration.Execute(database);
-
-                    dbVersion = VersionTable.GetCurrentVersionWithLock(database);
 
                     if (migration.Version > dbVersion)
                     {
