@@ -22,7 +22,7 @@ namespace SimpleDbMigrations
                 0;
         }
 
-        public DbMigrator(Assembly assembly, string schemaName, string manifestPath) :
+        public DbMigrator(string schemaName, Assembly assembly, string manifestPath) :
             this(schemaName, new EmbeddedResourceMigrationResolver(assembly, manifestPath)) { }
 
         private string SchemaName { get; }
