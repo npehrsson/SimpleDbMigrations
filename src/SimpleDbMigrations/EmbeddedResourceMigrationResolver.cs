@@ -14,8 +14,15 @@ namespace SimpleDbMigrations
 
         public EmbeddedResourceMigrationResolver(Assembly assembly, string manifestPath)
         {
-            _assembly = assembly;
-            _manifestPath = manifestPath;
+            _assembly = assembly ?? throw new ArgumentNullException(nameof(assembly));
+            _manifestPath = manifestPath ?? throw new ArgumentNullException(nameof(manifestPath));
+        }
+
+        public EmbeddedResourceMigrationResolver(Type type)
+        {
+            if (type == null) throw new ArgumentNullException(nameof(type));
+            _assembly = type.Assembly;
+            _manifestPath = type.Namespace;
         }
 
         public IList<Migration> Resolve()

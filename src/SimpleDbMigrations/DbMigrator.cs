@@ -11,7 +11,9 @@ namespace SimpleDbMigrations
     {
         public DbMigrator(string schemaName, IMigrationsResolver migrationsResolver)
         {
-            SchemaName = schemaName;
+            if (migrationsResolver == null) throw new ArgumentNullException(nameof(migrationsResolver));
+
+            SchemaName = schemaName ?? throw new ArgumentNullException(nameof(schemaName));
             Migrations = migrationsResolver.Resolve()
                 .OrderBy(x => x.Version)
                 .ToList();
@@ -22,8 +24,11 @@ namespace SimpleDbMigrations
                 0;
         }
 
-        public DbMigrator(Assembly assembly, string schemaName, string manifestPath) :
-            this(schemaName, new EmbeddedResourceMigrationResolver(assembly, manifestPath)) { }
+        public DbMigrator(string schemaName, Assembly assembly, string manifestPath)
+            : this(schemaName, new EmbeddedResourceMigrationResolver(assembly, manifestPath)) { }
+
+        public DbMigrator(string schemaName, Type type)
+            : this(schemaName, new EmbeddedResourceMigrationResolver(type)) { }
 
         private string SchemaName { get; }
         private long LatestSchemaVersion { get; }
