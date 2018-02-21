@@ -85,6 +85,18 @@ namespace SimpleDbMigrations
             {
                 CreateSchemaIfNotExisting(migratorDatabase);
             }
+            
+            try
+            {
+                migratorDatabase.ExecuteSqlCommand($@"
+                    CREATE TABLE {TableName} (
+                        Id UNIQUEIDENTIFIER DEFAULT NEWID() PRIMARY KEY CLUSTERED,
+                        [Version] BIGINT
+                    )");
+            }
+            catch (SqlException e) when (e.Number == ThereIsAlreadyAnObjectNamedXXXXInTheDatabase)
+            {
+            }
         }
     }
 }
