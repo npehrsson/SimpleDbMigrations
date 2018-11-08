@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.27130.2010
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimpleDbMigrations", "src\SimpleDbMigrations\SimpleDbMigrations.csproj", "{135F7D99-2947-4243-98E3-04D9240E2E23}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SimpleDbMigrations", "src\SimpleDbMigrations\SimpleDbMigrations.csproj", "{135F7D99-2947-4243-98E3-04D9240E2E23}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
