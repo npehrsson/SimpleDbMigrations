@@ -9,6 +9,11 @@ namespace SimpleDbMigrations
 {
     public class ResourceMigration : Migration
     {
+        private static Regex Comments = new Regex(@"--.*$", RegexOptions.Compiled|RegexOptions.Multiline);
+        private static Regex MiddleGo = new Regex(@"\sGO\s", RegexOptions.Compiled|RegexOptions.IgnoreCase);
+        private static Regex LeadingGo = new Regex(@"^GO\s", RegexOptions.Compiled|RegexOptions.IgnoreCase);
+        private static Regex TrailingGo = new Regex(@"\sGO$", RegexOptions.Compiled|RegexOptions.IgnoreCase);
+        
         public ResourceMigration(Assembly assembly, string resourceName, long version)
         {
             Assembly = assembly ?? throw new ArgumentNullException(nameof(assembly));
@@ -38,7 +43,17 @@ namespace SimpleDbMigrations
             using (var streamReader = new StreamReader(Assembly.GetManifestResourceStream(ResourceName)))
             {
                 var commandText = streamReader.ReadToEnd();
-                return Regex.Split(commandText, @"\sGO\s").Where(x => !string.IsNullOrEmpty(x));
+                commandText = Comments.Replace(commandText, string.Empty);
+                return MiddleGo
+                    .Split(commandText)
+                    .Select(x => {
+                        if (LeadingGo.IsMatch(x))
+                            x = x.Substring(2);
+                        if (TrailingGo.IsMatch(x))
+                            x = x.Substring(0, x.Length - 2);
+                        return x;
+                    })
+                    .Where(x => !string.IsNullOrEmpty(x));
             }
         }
     }
