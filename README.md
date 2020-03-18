@@ -1,6 +1,6 @@
 |||
 | --- | --- |
-| **Build** | [![Build status](https://ci.appveyor.com/api/projects/status/jk7yhplpwmap5agk/branch/master?svg=true](https://ci.appveyor.com/project/npehrsson/simpledbmigrations) |
+| **Build** | [![Build status](https://ci.appveyor.com/api/projects/status/jk7yhplpwmap5agk/branch/master?svg=true)](https://ci.appveyor.com/project/npehrsson/simpledbmigrations) |
 | **NuGet** | [![nuget](https://img.shields.io/nuget/v/SimpleDbMigrations.svg)](https://www.nuget.org/packages/SimpleDbMigrations/)
 
 
