@@ -1,9 +1,10 @@
 using System;
 using System.Data;
+using Microsoft.Data.SqlClient;
 
 namespace SimpleDbMigrations
 {
-    public class MigratorDatabase
+    public class MigratorDatabase : IDisposable
     {
         public MigratorDatabase(IDbConnection connection)
         {
@@ -12,9 +13,9 @@ namespace SimpleDbMigrations
 
         private IDbConnection Connection { get; }
         public string Name => Connection.Database;
-        public IDbTransaction Transaction { get; private set; }
+        private IDbTransaction Transaction { get; set; }
 
-        public IDbTransaction BeginTransaction()
+        public IDisposable BeginTransaction()
         {
             if (Transaction != null) 
                 throw new InvalidOperationException("Cannot open a transaction twice");
@@ -49,12 +50,26 @@ namespace SimpleDbMigrations
             return command;
         }
 
+        public void Commit()
+        {
+            Transaction.Commit();
+            Transaction = null;
+        }
+
+        public MigratorDatabase Clone() => new MigratorDatabase(new SqlConnection(Connection.ConnectionString));
+        
         private void OpenIfClosed()
         {
             if (Connection.State != ConnectionState.Closed)
                 return;
 
             Connection.Open();
+        }
+
+        public void Dispose()
+        {
+            Connection?.Dispose();
+            Transaction?.Dispose();
         }
     }
 }
