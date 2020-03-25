@@ -9,15 +9,17 @@ namespace SimpleDbMigrations
 {
     public class ResourceMigration : Migration
     {
-        public ResourceMigration(Assembly assembly, string resourceName, long version)
+        public ResourceMigration(Assembly assembly, string resourceName, long version, bool disableTransaction)
         {
             Assembly = assembly ?? throw new ArgumentNullException(nameof(assembly));
             ResourceName = resourceName;
             Version = version;
+            DisableTransaction = disableTransaction;
         }
 
         public Assembly Assembly { get; }
         public string ResourceName { get; }
+        public override bool DisableTransaction { get; }
         public override long Version { get; }
 
         public override void Execute(MigratorDatabase migratorDatabase)

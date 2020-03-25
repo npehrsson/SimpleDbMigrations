@@ -51,36 +51,72 @@ namespace SimpleDbMigrations
             if (dbVersion >= LatestSchemaVersion)
                 return;
 
-            Migrate(dbVersion, database);
+            while (MigrateNext(dbVersion, database)) { };
         }
 
-        private void Migrate(long dbVersion, MigratorDatabase database)
+        private bool MigrateNext(long dbVersion, MigratorDatabase database)
         {
-            using (var transaction = database.BeginTransaction())
+            using (database.BeginTransaction())
             {
                 dbVersion = VersionTable.GetCurrentVersionWithLock(database);
 
                 if (dbVersion >= LatestSchemaVersion)
-                    return;
+                    return false;
 
                 Interceptor?.PreMigration(database.Name, dbVersion, LatestSchemaVersion);
 
-                var migrations = Migrations.Where(x => x.Version > dbVersion);
+                var migrations = Migrations
+                    .Where(x => x.Version > dbVersion)
+                    .ToArray();
+
+                var firstMigration = migrations.First();
+
+                if (firstMigration.DisableTransaction)
+                {
+                    using (var noTransactionDatabase = database.Clone())
+                        ExecuteMigration(migrations.First(), noTransactionDatabase);
+
+                    if (firstMigration.Version > dbVersion)
+                        VersionTable.SetVersion(database, firstMigration.Version);
+
+                    database.Commit();
+
+                    if (migrations.Length == 1)
+                    {
+                        Interceptor?.PostMigration(database.Name, dbVersion, LatestSchemaVersion);
+                        return false;
+                    }
+
+                    return true;
+                }
 
                 foreach (var migration in migrations)
                 {
-                    Interceptor?.PreMigrationStep(database.Name, migration);
-                    migration.Execute(database);
-                    Interceptor?.PostMigrationStep(database.Name, migration);
+                    if (migration.DisableTransaction)
+                    {
+                        database.Commit();
+                        return true;
+                    }
+
+                    ExecuteMigration(migration, database);
 
                     if (migration.Version > dbVersion)
                         VersionTable.SetVersion(database, migration.Version);
                 }
 
-                transaction.Commit();
+                database.Commit();
 
                 Interceptor?.PostMigration(database.Name, dbVersion, LatestSchemaVersion);
+
+                return false;
             }
+        }
+
+        private void ExecuteMigration(Migration migration, MigratorDatabase database)
+        {
+            Interceptor?.PreMigrationStep(database.Name, migration);
+            migration.Execute(database);
+            Interceptor?.PostMigrationStep(database.Name, migration);
         }
 
         private void LoadMigrationsIfNotLoaded()
