@@ -1,4 +1,3 @@
-using Microsoft.Data.SqlClient;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -32,20 +31,23 @@ namespace SimpleDbMigrations
 
         public void Migrate(string connectionString)
         {
-            using (var connection = new SqlConnection(connectionString))
-            {
-                Migrate(connection);
-            }
+            if (connectionString == null) throw new ArgumentNullException(nameof(connectionString));
+            Migrate(new MigratorDatabase(connectionString));
         }
 
+        [Obsolete("Using this can result in issues if using no-transaction migrations, use Migrate(string connectionString) instead")]
         public void Migrate(IDbConnection connection)
         {
             if (connection == null)
                 throw new ArgumentNullException(nameof(connection));
 
+            Migrate(new MigratorDatabase(connection));
+        }
+
+        private void Migrate(MigratorDatabase database)
+        {
             LoadMigrationsIfNotLoaded();
 
-            var database = new MigratorDatabase(connection);
             var dbVersion = GetDbVersion(database);
 
             if (dbVersion >= LatestSchemaVersion)

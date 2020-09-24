@@ -8,7 +8,7 @@
     <Product />
     <PackageProjectUrl>https://github.com/npehrsson/SimpleDbMigrations</PackageProjectUrl>
     <PackageTags>SQL, Migrations</PackageTags>
-    <Version>1.4.0</Version>
+    <Version>1.5.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
