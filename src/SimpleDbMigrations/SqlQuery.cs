@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace SimpleDbMigrations
 {
@@ -15,28 +17,28 @@ namespace SimpleDbMigrations
 
         public int CommandTimeout { get; set; } = 30;
 
-        public T FirstOrDefault()
+        public async Task<T> FirstOrDefaultAsync(CancellationToken cancellation = default)
         {
-            using var command = _migratorDatabase.CreateCommand();
+            await using var command = await _migratorDatabase.CreateCommandAsync(cancellation);
             command.CommandText = _command;
-            using var reader = command.ExecuteReader();
-            if (reader.Read())
+            await using var reader = await command.ExecuteReaderAsync(cancellation);
+            if (await reader.ReadAsync(cancellation))
                 return (T) reader.GetValue(0);
 
             return default;
         }
 
-        public T Single()
+        public async Task<T> SingleAsync(CancellationToken cancellation = default)
         {
-            using var command = _migratorDatabase.CreateCommand();
+            await using var command = await _migratorDatabase.CreateCommandAsync(cancellation);
             command.CommandText = _command;
-            using var reader = command.ExecuteReader();
-            if (!reader.Read())
+            await using var reader = await command.ExecuteReaderAsync(cancellation);
+            if (!await reader.ReadAsync(cancellation))
                 throw new InvalidOperationException("Sequence contained zero items");
 
             var value = (T)reader.GetValue(0);
 
-            if (reader.Read())
+            if (await reader.ReadAsync(cancellation))
                 throw new InvalidOperationException("Sequence contained more than one item");
 
             return value;

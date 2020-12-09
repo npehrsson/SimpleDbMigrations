@@ -1,16 +1,13 @@
 using System;
 using System.Data;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
 
 namespace SimpleDbMigrations
 {
     public class MigratorDatabase : IDisposable
     {
-        public MigratorDatabase(IDbConnection connection)
-        {
-            Connection = connection ?? throw new ArgumentNullException(nameof(connection));
-        }
-
         public MigratorDatabase(string connectionString)
         {
             if (connectionString == null) throw new ArgumentNullException(nameof(connectionString));
@@ -19,57 +16,55 @@ namespace SimpleDbMigrations
         }
 
         private string ConnectionString { get; set; }
-        private IDbConnection Connection { get; }
+        private SqlConnection Connection { get; }
         public string Name => Connection.Database;
-        private IDbTransaction Transaction { get; set; }
+        private SqlTransaction Transaction { get; set; }
 
-        public IDisposable BeginTransaction()
+        public async Task<IDisposable> BeginTransactionAsync(CancellationToken cancellation = default)
         {
             if (Transaction != null) 
                 throw new InvalidOperationException("Cannot open a transaction twice");
 
-            OpenIfClosed();
-
-            Transaction = Connection.BeginTransaction();
-            return Transaction;
+            await OpenIfClosedAsync(cancellation);
+            return await Connection.BeginTransactionAsync(cancellation);
         }
 
-        public SqlQuery<T> SqlQuery<T>(string command, int commandTimeout = 30) 
+        public async Task<SqlQuery<T>> SqlQueryAsync<T>(string command, int commandTimeout = 30, CancellationToken cancellation = default) 
         {
-            OpenIfClosed();
+            await OpenIfClosedAsync(cancellation);
             return new SqlQuery<T>(command, this) { CommandTimeout = commandTimeout };
         }
 
-        public int ExecuteSqlCommand(string commandText)
+        public async Task<int> ExecuteSqlCommandAsync(string commandText, CancellationToken cancellation = default)
         {
-            OpenIfClosed();
-            using var command = CreateCommand();
+            await OpenIfClosedAsync(cancellation);
+            await using var command = await CreateCommandAsync(cancellation);
             command.CommandText = commandText;
-            return command.ExecuteNonQuery();
+            return await command.ExecuteNonQueryAsync(cancellation);
         }
 
-        public IDbCommand CreateCommand()
+        public async Task<SqlCommand> CreateCommandAsync(CancellationToken cancellation = default)
         {
-            OpenIfClosed();
+            await OpenIfClosedAsync(cancellation);
             var command = Connection.CreateCommand();
             command.Transaction = Transaction;
             return command;
         }
 
-        public void Commit()
+        public async Task CommitASync(CancellationToken cancellation = default)
         {
-            Transaction.Commit();
+            await Transaction.CommitAsync(cancellation);
             Transaction = null;
         }
 
-        public MigratorDatabase Clone() => new MigratorDatabase(new SqlConnection(ConnectionString));
+        public MigratorDatabase Clone() => new MigratorDatabase(ConnectionString);
         
-        private void OpenIfClosed()
+        private Task OpenIfClosedAsync(CancellationToken cancellation = default)
         {
             if (Connection.State != ConnectionState.Closed)
-                return;
+                return Task.CompletedTask;
 
-            Connection.Open();
+            return Connection.OpenAsync(cancellation);
         }
 
         public void Dispose()

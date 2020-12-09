@@ -1,4 +1,6 @@
-﻿using Microsoft.Data.SqlClient;
+﻿using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
 
 namespace SimpleDbMigrations
 {
@@ -26,69 +28,73 @@ namespace SimpleDbMigrations
         public string IfExistsCurrentVersionQuery => $@"IF OBJECT_ID('{TableName}', 'U') IS NULL    SELECT NULL ELSE    {CurrentVersionQuery};";
         private string TableName => (HasSchema ? $"{SchemaName}." : string.Empty) + DatabaseVersionTableName;
 
-        public void CreateIfNotExisting(MigratorDatabase migratorDatabase)
+        public async Task CreateIfNotExistingAsync(MigratorDatabase database, CancellationToken cancellation = default)
         {
-            if (!Exists(migratorDatabase))
+            if (!await ExistsAsync(database, cancellation))
             {
-                Create(migratorDatabase);
+                await CreateAsync(database, cancellation);
             }
         }
 
-        public long GetCurrentVersion(MigratorDatabase migratorDatabase)
+        public async Task<long> GetCurrentVersionAsync(MigratorDatabase database, CancellationToken cancellation = default)
         {
-            return migratorDatabase.SqlQuery<long>(CurrentVersionQuery, SecondsToWaitOnFetchingTheDatabaseVersion).FirstOrDefault();
+            var cmd = await database.SqlQueryAsync<long>(CurrentVersionQuery, SecondsToWaitOnFetchingTheDatabaseVersion, cancellation);
+            return await cmd.FirstOrDefaultAsync(cancellation);
         }
 
-        public long GetCurrentVersionWithLock(MigratorDatabase migratorDatabase)
+        public async Task<long> GetCurrentVersionWithLockAsync(MigratorDatabase database, CancellationToken cancellation = default)
         {
-            return migratorDatabase.SqlQuery<long>(CurrentVersionQuery + " WITH (UPDLOCK, TABLOCK)", SecondsToWaitOnFetchingTheDatabaseVersion).FirstOrDefault();
+            var cmd = await database.SqlQueryAsync<long>(CurrentVersionQuery + " WITH (UPDLOCK, TABLOCK)", SecondsToWaitOnFetchingTheDatabaseVersion, cancellation);
+            return await cmd.FirstOrDefaultAsync(cancellation);
         }
 
-        public void SetVersion(MigratorDatabase migratorDatabase, long version)
+        public async Task SetVersionAsync(MigratorDatabase database, long version, CancellationToken cancellation = default)
         {
-            if (migratorDatabase.ExecuteSqlCommand($"UPDATE {TableName} SET {DatabaseVersionColumnName} = {version}") == 0)
+            if (await database.ExecuteSqlCommandAsync($"UPDATE {TableName} SET {DatabaseVersionColumnName} = {version}", cancellation) == 0)
             {
-                migratorDatabase.ExecuteSqlCommand($"INSERT INTO {TableName}(Version) VALUES({version})");
+                await database.ExecuteSqlCommandAsync($"INSERT INTO {TableName}(Version) VALUES({version})", cancellation);
             }
         }
 
-        public bool Exists(MigratorDatabase migratorDatabase)
+        public async Task<bool> ExistsAsync(MigratorDatabase database, CancellationToken cancellation = default)
         {
-            return 0 != migratorDatabase.SqlQuery<int>($@"
+            var cmd = await database.SqlQueryAsync<int>($@"
                     SELECT Count(*) FROM sys.tables AS tables
                     JOIN sys.schemas AS schemas on tables.schema_id = schemas.schema_id
-                    WHERE concat(schemas.name, '.', tables.name) = '{TableName}' AND type = 'U'").Single();
+                    WHERE concat(schemas.name, '.', tables.name) = '{TableName}' AND type = 'U'", cancellation: cancellation);
+            return 0 != await cmd.SingleAsync(cancellation);
         }
 
-        private void CreateSchemaIfNotExisting(MigratorDatabase migratorDatabase)
+        private async Task CreateSchemaIfNotExistingAsync(MigratorDatabase database, CancellationToken cancellation = default)
         {
-            var schemaCount = migratorDatabase.SqlQuery<int>($@"
+            var cmd = await database.SqlQueryAsync<int>($@"
                     SELECT Count(schema_name) 
                     FROM information_schema.schemata 
-                    WHERE schema_name = '{SchemaName}'").Single();
+                    WHERE schema_name = '{SchemaName}'", cancellation: cancellation);
+            var schemaCount = await cmd.SingleAsync(cancellation);
 
             if (schemaCount == 1)
                 return;
 
             try
             {
-                migratorDatabase.ExecuteSqlCommand($"CREATE SCHEMA {SchemaName}");
+                await database.ExecuteSqlCommandAsync($"CREATE SCHEMA {SchemaName}", cancellation);
             }
             catch (SqlException e) when (e.Number == ThereIsAlreadyAnObjectNamedXxxInTheDatabase) { }
         }
 
-        private void Create(MigratorDatabase migratorDatabase)
+        private async Task CreateAsync(MigratorDatabase database, CancellationToken cancellation = default)
         {
             if (HasSchema)
-                CreateSchemaIfNotExisting(migratorDatabase);
+                await CreateSchemaIfNotExistingAsync(database, cancellation);
 
             try
             {
-                migratorDatabase.ExecuteSqlCommand($@"
+                await database.ExecuteSqlCommandAsync($@"
                     CREATE TABLE {TableName} (
                         Id UNIQUEIDENTIFIER DEFAULT NEWID() PRIMARY KEY CLUSTERED,
                         [Version] BIGINT
-                    )");
+                    )", cancellation);
             }
             catch (SqlException e) when (e.Number == ThereIsAlreadyAnObjectNamedXxxInTheDatabase)
             {

@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace SimpleDbMigrations
 {
@@ -28,29 +30,33 @@ namespace SimpleDbMigrations
         private IList<Migration> Migrations { get; set; }
         public IDbMigratorInterceptor Interceptor { get; set; }
 
-        public void Migrate(string connectionString)
+        public void Migrate(string connectionString) => MigrateAsync(connectionString).GetAwaiter().GetResult();
+
+        public Task MigrateAsync(string connectionString, CancellationToken cancellation = default)
         {
             if (connectionString == null) throw new ArgumentNullException(nameof(connectionString));
-            Migrate(new MigratorDatabase(connectionString));
+            return MigrateAsync(new MigratorDatabase(connectionString), cancellation);
         }
 
-        private void Migrate(MigratorDatabase database)
+        private async Task MigrateAsync(MigratorDatabase database, CancellationToken cancellation = default)
         {
             LoadMigrationsIfNotLoaded();
 
-            var dbVersion = GetDbVersion(database);
+            var dbVersion = await GetDbVersionAsync(database, cancellation);
 
             if (dbVersion >= LatestSchemaVersion)
                 return;
 
-            while (MigrateNext(dbVersion, database)) { };
+            while (await MigrateNextAsync(dbVersion, database, cancellation))
+            {
+            }
         }
 
-        private bool MigrateNext(long dbVersion, MigratorDatabase database)
+        private async Task<bool> MigrateNextAsync(long dbVersion, MigratorDatabase database, CancellationToken cancellation = default)
         {
-            using (database.BeginTransaction())
+            using (database.BeginTransactionAsync(cancellation))
             {
-                dbVersion = VersionTable.GetCurrentVersionWithLock(database);
+                dbVersion = await VersionTable.GetCurrentVersionWithLockAsync(database);
 
                 if (dbVersion >= LatestSchemaVersion)
                     return false;
@@ -66,12 +72,12 @@ namespace SimpleDbMigrations
                 if (firstMigration.DisableTransaction)
                 {
                     using (var noTransactionDatabase = database.Clone())
-                        ExecuteMigration(migrations.First(), noTransactionDatabase);
+                        await ExecuteMigrationAsync(migrations.First(), noTransactionDatabase, cancellation);
 
                     if (firstMigration.Version > dbVersion)
-                        VersionTable.SetVersion(database, firstMigration.Version);
+                        await VersionTable.SetVersionAsync(database, firstMigration.Version, cancellation);
 
-                    database.Commit();
+                    await database.CommitASync(cancellation);
 
                     if (migrations.Length == 1)
                     {
@@ -84,19 +90,21 @@ namespace SimpleDbMigrations
 
                 foreach (var migration in migrations)
                 {
+                    cancellation.ThrowIfCancellationRequested();
+
                     if (migration.DisableTransaction)
                     {
-                        database.Commit();
+                        await database.CommitASync(cancellation);
                         return true;
                     }
 
-                    ExecuteMigration(migration, database);
+                    await ExecuteMigrationAsync(migration, database, cancellation);
 
                     if (migration.Version > dbVersion)
-                        VersionTable.SetVersion(database, migration.Version);
+                        await VersionTable.SetVersionAsync(database, migration.Version, cancellation);
                 }
 
-                database.Commit();
+                await database.CommitASync(cancellation);
 
                 Interceptor?.PostMigration(database.Name, dbVersion, LatestSchemaVersion);
 
@@ -104,10 +112,10 @@ namespace SimpleDbMigrations
             }
         }
 
-        private void ExecuteMigration(Migration migration, MigratorDatabase database)
+        private async Task ExecuteMigrationAsync(Migration migration, MigratorDatabase database, CancellationToken cancellation = default)
         {
             Interceptor?.PreMigrationStep(database.Name, migration);
-            migration.Execute(database);
+            await migration.ExecuteAsync(database, cancellation);
             Interceptor?.PostMigrationStep(database.Name, migration);
         }
 
@@ -131,10 +139,10 @@ namespace SimpleDbMigrations
             Interceptor?.DetectedMigrations(Migrations.ToArray(), LatestSchemaVersion);
         }
 
-        private long GetDbVersion(MigratorDatabase database)
+        private async Task<long> GetDbVersionAsync(MigratorDatabase database, CancellationToken cancellation)
         {
-            VersionTable.CreateIfNotExisting(database);
-            return VersionTable.GetCurrentVersion(database);
+            await VersionTable.CreateIfNotExistingAsync(database, cancellation);
+            return await VersionTable.GetCurrentVersionAsync(database, cancellation);
         }
     }
 }

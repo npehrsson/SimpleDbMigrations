@@ -31,7 +31,7 @@ namespace SimpleDbMigrations
                 .GetManifestResourceNames()
                 .Where(x => x.IndexOf(_manifestPath, StringComparison.OrdinalIgnoreCase) > -1
                             && x.EndsWith(".sql", StringComparison.OrdinalIgnoreCase))
-                .Select(x => new ResourceMigration(_assembly, x, GetFileVersion(x), IsTransactionDisabled(x)) as Migration)
+                .Select(x => new EmbeddedResourceMigration(_assembly, x, GetFileVersion(x), IsTransactionDisabled(x)) as Migration)
                 .OrderBy(x => x.Version)
                 .ToList();
         }
