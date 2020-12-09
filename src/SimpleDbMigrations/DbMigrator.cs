@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Data;
 using System.Linq;
 using System.Reflection;
 
@@ -33,15 +32,6 @@ namespace SimpleDbMigrations
         {
             if (connectionString == null) throw new ArgumentNullException(nameof(connectionString));
             Migrate(new MigratorDatabase(connectionString));
-        }
-
-        [Obsolete("Using this can result in issues if using no-transaction migrations, use Migrate(string connectionString) instead")]
-        public void Migrate(IDbConnection connection)
-        {
-            if (connection == null)
-                throw new ArgumentNullException(nameof(connection));
-
-            Migrate(new MigratorDatabase(connection));
         }
 
         private void Migrate(MigratorDatabase database)
