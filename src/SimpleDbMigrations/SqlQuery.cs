@@ -17,43 +17,29 @@ namespace SimpleDbMigrations
 
         public T FirstOrDefault()
         {
-            using (var command = _migratorDatabase.CreateCommand())
-            {
-                command.CommandText = _command;
-                using (var reader = command.ExecuteReader())
-                {
-                    if (reader.Read())
-                    {
-                        return (T)reader.GetValue(0);
-                    }
+            using var command = _migratorDatabase.CreateCommand();
+            command.CommandText = _command;
+            using var reader = command.ExecuteReader();
+            if (reader.Read())
+                return (T) reader.GetValue(0);
 
-                    return default(T);
-                }
-            }
+            return default;
         }
 
         public T Single()
         {
-            using (var command = _migratorDatabase.CreateCommand())
-            {
-                command.CommandText = _command;
-                using (var reader = command.ExecuteReader())
-                {
-                    if (!reader.Read())
-                    {
-                        throw new InvalidOperationException("Sequence contained zero items");
-                    }
+            using var command = _migratorDatabase.CreateCommand();
+            command.CommandText = _command;
+            using var reader = command.ExecuteReader();
+            if (!reader.Read())
+                throw new InvalidOperationException("Sequence contained zero items");
 
-                    var value = (T)reader.GetValue(0);
+            var value = (T)reader.GetValue(0);
 
-                    if (reader.Read())
-                    {
-                        throw new InvalidOperationException("Sequence contained more than one item");
-                    }
+            if (reader.Read())
+                throw new InvalidOperationException("Sequence contained more than one item");
 
-                    return value;
-                }
-            }
+            return value;
         }
     }
 }

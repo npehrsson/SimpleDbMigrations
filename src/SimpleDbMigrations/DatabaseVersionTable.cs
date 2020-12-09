@@ -68,9 +68,7 @@ namespace SimpleDbMigrations
                     WHERE schema_name = '{SchemaName}'").Single();
 
             if (schemaCount == 1)
-            {
                 return;
-            }
 
             try
             {
@@ -82,10 +80,8 @@ namespace SimpleDbMigrations
         private void Create(MigratorDatabase migratorDatabase)
         {
             if (HasSchema)
-            {
                 CreateSchemaIfNotExisting(migratorDatabase);
-            }
-            
+
             try
             {
                 migratorDatabase.ExecuteSqlCommand($@"

@@ -43,11 +43,9 @@ namespace SimpleDbMigrations
         public int ExecuteSqlCommand(string commandText)
         {
             OpenIfClosed();
-            using (var command = CreateCommand())
-            {
-                command.CommandText = commandText;
-                return command.ExecuteNonQuery();
-            }
+            using var command = CreateCommand();
+            command.CommandText = commandText;
+            return command.ExecuteNonQuery();
         }
 
         public IDbCommand CreateCommand()

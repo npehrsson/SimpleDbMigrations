@@ -26,22 +26,18 @@ namespace SimpleDbMigrations
         {
             foreach (var commandText in ParseCommands())
             {
-                using (var command = migratorDatabase.CreateCommand())
-                {
-                    command.CommandText = commandText;
-                    command.CommandTimeout = 0;
-                    command.ExecuteNonQuery();
-                }
+                using var command = migratorDatabase.CreateCommand();
+                command.CommandText = commandText;
+                command.CommandTimeout = 0;
+                command.ExecuteNonQuery();
             }
         }
 
         private IEnumerable<string> ParseCommands()
         {
-            using (var streamReader = new StreamReader(Assembly.GetManifestResourceStream(ResourceName)))
-            {
-                var commandText = streamReader.ReadToEnd();
-                return Regex.Split(commandText, @"\sGO\s").Where(x => !string.IsNullOrEmpty(x));
-            }
+            using var streamReader = new StreamReader(Assembly.GetManifestResourceStream(ResourceName) ?? throw new InvalidOperationException($"No such resource found: {ResourceName}"));
+            var commandText = streamReader.ReadToEnd();
+            return Regex.Split(commandText, @"\sGO\s").Where(x => !string.IsNullOrEmpty(x));
         }
     }
 }
