@@ -21,17 +21,19 @@ namespace SimpleDbMigrations
         {
             await using var command = await _migratorDatabase.CreateCommandAsync(cancellation);
             command.CommandText = _command;
+            command.CommandTimeout = CommandTimeout;
             await using var reader = await command.ExecuteReaderAsync(cancellation);
             if (await reader.ReadAsync(cancellation))
                 return (T) reader.GetValue(0);
 
-            return default;
+            return default!;
         }
 
         public async Task<T> SingleAsync(CancellationToken cancellation = default)
         {
             await using var command = await _migratorDatabase.CreateCommandAsync(cancellation);
             command.CommandText = _command;
+            command.CommandTimeout = CommandTimeout;
             await using var reader = await command.ExecuteReaderAsync(cancellation);
             if (!await reader.ReadAsync(cancellation))
                 throw new InvalidOperationException("Sequence contained zero items");

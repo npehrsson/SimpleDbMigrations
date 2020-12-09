@@ -22,7 +22,7 @@ namespace SimpleDbMigrations
         {
             if (type == null) throw new ArgumentNullException(nameof(type));
             _assembly = type.Assembly;
-            _manifestPath = type.Namespace;
+            _manifestPath = type.Namespace ?? throw new InvalidOperationException("Type does not have namespace.");
         }
 
         public IList<Migration> Resolve()

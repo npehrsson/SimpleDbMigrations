@@ -8,7 +8,7 @@ namespace SimpleDbMigrations
     {
         private const string DatabaseVersionTableName = "DatabaseVersion";
         private const string DatabaseVersionColumnName = "Version";
-        private const string DefaultSchema = "dbo";
+        public const string DefaultSchema = "dbo";
         private const int ThereIsAlreadyAnObjectNamedXxxInTheDatabase = 2714;
         private const int SecondsToWaitOnFetchingTheDatabaseVersion = 240;
 

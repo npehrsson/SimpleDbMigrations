@@ -9,26 +9,50 @@ namespace SimpleDbMigrations
 {
     public class DbMigrator
     {
-        private readonly IMigrationsResolver _migrationsResolver;
+        private const string DefaultSchema = DatabaseVersionTable.DefaultSchema;
 
-        public DbMigrator(string schemaName, IMigrationsResolver migrationsResolver)
+        private readonly IMigrationsResolver _migrationsResolver;
+        private readonly CachedDatabaseVersionTable _versionTable;
+        private long _latestSchemaVersion;
+        private volatile IList<Migration>? _migrations;
+
+
+        public DbMigrator(IMigrationsResolver migrationsResolver, string schemaName = DefaultSchema)
         {
             _migrationsResolver = migrationsResolver ?? throw new ArgumentNullException(nameof(migrationsResolver));
-            SchemaName = schemaName ?? throw new ArgumentNullException(nameof(schemaName));
-            VersionTable = new CachedDatabaseVersionTable(new DatabaseVersionTable(SchemaName));
+            _versionTable = new CachedDatabaseVersionTable(new DatabaseVersionTable(schemaName));
         }
 
+        public DbMigrator(Assembly assembly, string manifestPath, string schema = DefaultSchema)
+            : this(new EmbeddedResourceMigrationResolver(assembly, manifestPath), schema)
+        {
+        }
+
+        public DbMigrator(Type type, string schemaName = DefaultSchema)
+            : this(new EmbeddedResourceMigrationResolver(type), schemaName)
+        {
+        }
+
+        [Obsolete("Use overload with optional schemaName.")]
+        public DbMigrator(string schemaName, IMigrationsResolver migrationsResolver)
+            : this(migrationsResolver, schemaName)
+        {
+        }
+
+        [Obsolete("Use overload with optional schemaName.")]
         public DbMigrator(string schemaName, Assembly assembly, string manifestPath)
-            : this(schemaName, new EmbeddedResourceMigrationResolver(assembly, manifestPath)) { }
+            : this(schemaName, new EmbeddedResourceMigrationResolver(assembly, manifestPath))
+        {
+        }
 
+        [Obsolete("Use overload with optional schemaName.")]
         public DbMigrator(string schemaName, Type type)
-            : this(schemaName, new EmbeddedResourceMigrationResolver(type)) { }
+            : this(schemaName, new EmbeddedResourceMigrationResolver(type))
+        {
+        }
 
-        private string SchemaName { get; }
-        private long LatestSchemaVersion { get; set; }
-        private CachedDatabaseVersionTable VersionTable { get; }
-        private IList<Migration> Migrations { get; set; }
-        public IDbMigratorInterceptor Interceptor { get; set; }
+        // ReSharper disable once UnusedAutoPropertyAccessor.Global
+        public IDbMigratorInterceptor? Interceptor { get; set; }
 
         public void Migrate(string connectionString) => MigrateAsync(connectionString).GetAwaiter().GetResult();
 
@@ -40,32 +64,32 @@ namespace SimpleDbMigrations
 
         private async Task MigrateAsync(MigratorDatabase database, CancellationToken cancellation = default)
         {
-            LoadMigrationsIfNotLoaded();
+            var migrations = LoadMigrationsIfNotLoaded();
 
             var dbVersion = await GetDbVersionAsync(database, cancellation);
 
-            if (dbVersion >= LatestSchemaVersion)
+            if (dbVersion >= _latestSchemaVersion)
                 return;
 
-            while (await MigrateNextAsync(dbVersion, database, cancellation))
+            while (await MigrateNextAsync(dbVersion, database, migrations, cancellation))
             {
             }
         }
 
-        private async Task<bool> MigrateNextAsync(long dbVersion, MigratorDatabase database, CancellationToken cancellation = default)
+        private async Task<bool> MigrateNextAsync(long dbVersion, MigratorDatabase database, IList<Migration> migrations, CancellationToken cancellation = default)
         {
             using (database.BeginTransactionAsync(cancellation))
             {
-                dbVersion = await VersionTable.GetCurrentVersionWithLockAsync(database);
+                dbVersion = await _versionTable.GetCurrentVersionWithLockAsync(database);
 
-                if (dbVersion >= LatestSchemaVersion)
+                if (dbVersion >= _latestSchemaVersion)
                     return false;
 
-                Interceptor?.PreMigration(database.Name, dbVersion, LatestSchemaVersion);
+                Interceptor?.PreMigration(database.Name, dbVersion, _latestSchemaVersion);
 
-                var migrations = Migrations
+                migrations = migrations
                     .Where(x => x.Version > dbVersion)
-                    .ToArray();
+                    .ToList();
 
                 var firstMigration = migrations.First();
 
@@ -75,13 +99,13 @@ namespace SimpleDbMigrations
                         await ExecuteMigrationAsync(migrations.First(), noTransactionDatabase, cancellation);
 
                     if (firstMigration.Version > dbVersion)
-                        await VersionTable.SetVersionAsync(database, firstMigration.Version, cancellation);
+                        await _versionTable.SetVersionAsync(database, firstMigration.Version, cancellation);
 
-                    await database.CommitASync(cancellation);
+                    await database.CommitAsync(cancellation);
 
-                    if (migrations.Length == 1)
+                    if (migrations.Count == 1)
                     {
-                        Interceptor?.PostMigration(database.Name, dbVersion, LatestSchemaVersion);
+                        Interceptor?.PostMigration(database.Name, dbVersion, _latestSchemaVersion);
                         return false;
                     }
 
@@ -94,19 +118,19 @@ namespace SimpleDbMigrations
 
                     if (migration.DisableTransaction)
                     {
-                        await database.CommitASync(cancellation);
+                        await database.CommitAsync(cancellation);
                         return true;
                     }
 
                     await ExecuteMigrationAsync(migration, database, cancellation);
 
                     if (migration.Version > dbVersion)
-                        await VersionTable.SetVersionAsync(database, migration.Version, cancellation);
+                        await _versionTable.SetVersionAsync(database, migration.Version, cancellation);
                 }
 
-                await database.CommitASync(cancellation);
+                await database.CommitAsync(cancellation);
 
-                Interceptor?.PostMigration(database.Name, dbVersion, LatestSchemaVersion);
+                Interceptor?.PostMigration(database.Name, dbVersion, _latestSchemaVersion);
 
                 return false;
             }
@@ -119,30 +143,33 @@ namespace SimpleDbMigrations
             Interceptor?.PostMigrationStep(database.Name, migration);
         }
 
-        private void LoadMigrationsIfNotLoaded()
+        private IList<Migration> LoadMigrationsIfNotLoaded()
         {
-            if (Migrations != null)
-                return;
+            if (_migrations != null)
+                return _migrations;
 
+            List<Migration> migrations;
             lock (_migrationsResolver)
             {
-                if (Migrations != null)
-                    return;
+                if (_migrations != null)
+                    return _migrations;
 
-                Migrations = _migrationsResolver.Resolve()
+                migrations = _migrationsResolver.Resolve()
                     .OrderBy(x => x.Version)
                     .ToList();
 
-                LatestSchemaVersion = Migrations.Any() ? Migrations.Max(x => x.Version) : 0;
+                _latestSchemaVersion = migrations.Any() ? migrations.Max(x => x.Version) : 0;
+                _migrations = migrations;
             }
 
-            Interceptor?.DetectedMigrations(Migrations.ToArray(), LatestSchemaVersion);
+            Interceptor?.DetectedMigrations(migrations.ToArray(), _latestSchemaVersion);
+            return _migrations;
         }
 
         private async Task<long> GetDbVersionAsync(MigratorDatabase database, CancellationToken cancellation)
         {
-            await VersionTable.CreateIfNotExistingAsync(database, cancellation);
-            return await VersionTable.GetCurrentVersionAsync(database, cancellation);
+            await _versionTable.CreateIfNotExistingAsync(database, cancellation);
+            return await _versionTable.GetCurrentVersionAsync(database, cancellation);
         }
     }
 }
