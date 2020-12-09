@@ -7,7 +7,7 @@ namespace SimpleDbMigrations
         private const string DatabaseVersionTableName = "DatabaseVersion";
         private const string DatabaseVersionColumnName = "Version";
         private const string DefaultSchema = "dbo";
-        private const int ThereIsAlreadyAnObjectNamedXXXXInTheDatabase = 2714;
+        private const int ThereIsAlreadyAnObjectNamedXxxInTheDatabase = 2714;
         private const int SecondsToWaitOnFetchingTheDatabaseVersion = 240;
 
         public DatabaseVersionTable(string schemaName)
@@ -76,7 +76,7 @@ namespace SimpleDbMigrations
             {
                 migratorDatabase.ExecuteSqlCommand($"CREATE SCHEMA {SchemaName}");
             }
-            catch (SqlException e) when (e.Number == ThereIsAlreadyAnObjectNamedXXXXInTheDatabase) { }
+            catch (SqlException e) when (e.Number == ThereIsAlreadyAnObjectNamedXxxInTheDatabase) { }
         }
 
         private void Create(MigratorDatabase migratorDatabase)
@@ -94,7 +94,7 @@ namespace SimpleDbMigrations
                         [Version] BIGINT
                     )");
             }
-            catch (SqlException e) when (e.Number == ThereIsAlreadyAnObjectNamedXXXXInTheDatabase)
+            catch (SqlException e) when (e.Number == ThereIsAlreadyAnObjectNamedXxxInTheDatabase)
             {
             }
         }
