@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace SimpleDbMigrations
 {
@@ -14,45 +16,40 @@ namespace SimpleDbMigrations
             _cache = new ConcurrentDictionary<string, long>();
         }
 
-        public void CreateIfNotExisting(MigratorDatabase migratorDatabase)
+        public Task CreateIfNotExistingAsync(MigratorDatabase database, CancellationToken cancellation = default)
         {
-            if (_cache.ContainsKey(migratorDatabase.Name))
-            {
-                return;
-            }
+            if (_cache.ContainsKey(database.Name))
+                return Task.CompletedTask;
 
-            _versionTable.CreateIfNotExisting(migratorDatabase);
+            return _versionTable.CreateIfNotExistingAsync(database, cancellation);
         }
 
-        public bool Exists(MigratorDatabase database)
-        {
-            return _versionTable.Exists(database);
-        }
+        public Task<bool> ExistsAsync(MigratorDatabase database, CancellationToken cancellation = default) => _versionTable.ExistsAsync(database, cancellation);
 
-        public long GetCurrentVersion(MigratorDatabase migratorDatabase)
+        public async Task<long> GetCurrentVersionAsync(MigratorDatabase database, CancellationToken cancellation = default)
         {
-            if (_cache.TryGetValue(migratorDatabase.Name, out var version))
+            if (_cache.TryGetValue(database.Name, out var version))
             {
                 return version;
             }
 
-            version = _versionTable.GetCurrentVersion(migratorDatabase);
-            _cache.AddOrUpdate(migratorDatabase.Name, version, (key, value) => version);
+            version = await _versionTable.GetCurrentVersionAsync(database, cancellation);
+            _cache.AddOrUpdate(database.Name, version, (key, value) => version);
 
             return version;
         }
 
-        public long GetCurrentVersionWithLock(MigratorDatabase migratorDatabase)
+        public async Task<long> GetCurrentVersionWithLockAsync(MigratorDatabase database)
         {
-            var version = _versionTable.GetCurrentVersionWithLock(migratorDatabase);
-            _cache.AddOrUpdate(migratorDatabase.Name, version, (key, value) => version);
+            var version = await _versionTable.GetCurrentVersionWithLockAsync(database);
+            _cache.AddOrUpdate(database.Name, version, (key, value) => version);
             return version;
         }
 
-        public void SetVersion(MigratorDatabase migratorDatabase, long version)
+        public async Task SetVersionAsync(MigratorDatabase database, long version, CancellationToken cancellation = default)
         {
-            _versionTable.SetVersion(migratorDatabase, version);
-            _cache.AddOrUpdate(migratorDatabase.Name, version, (key, value) => version);
+            await _versionTable.SetVersionAsync(database, version, cancellation);
+            _cache.AddOrUpdate(database.Name, version, (key, value) => version);
         }
 
         public bool IsVersionLoaded(string database)

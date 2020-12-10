@@ -1,83 +1,65 @@
 using System;
 using System.Data;
+using System.Data.Common;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
+using SimpleDbMigrations.DbExtensions;
 
 namespace SimpleDbMigrations
 {
     public class MigratorDatabase : IDisposable
     {
-        public MigratorDatabase(IDbConnection connection)
-        {
-            Connection = connection ?? throw new ArgumentNullException(nameof(connection));
-        }
+        private readonly string _connectionString;
+        private readonly SqlConnection _connection;
+        private DbTransaction? _transaction;
 
         public MigratorDatabase(string connectionString)
         {
             if (connectionString == null) throw new ArgumentNullException(nameof(connectionString));
-            Connection = new SqlConnection(connectionString);
-            ConnectionString = connectionString;
+            _connection = new SqlConnection(connectionString);
+            _connectionString = connectionString;
         }
 
-        private string ConnectionString { get; set; }
-        private IDbConnection Connection { get; }
-        public string Name => Connection.Database;
-        private IDbTransaction Transaction { get; set; }
+        public string Name => _connection.Database;
 
-        public IDisposable BeginTransaction()
+        public async Task<IDisposable> BeginTransactionAsync(CancellationToken cancellation = default)
         {
-            if (Transaction != null) 
+            if (_transaction != null) 
                 throw new InvalidOperationException("Cannot open a transaction twice");
 
-            OpenIfClosed();
-
-            Transaction = Connection.BeginTransaction();
-            return Transaction;
+            await OpenIfClosedAsync(cancellation);
+            return _transaction = await _connection.BeginTransactionAsync(cancellation);
         }
 
-        public SqlQuery<T> SqlQuery<T>(string command, int commandTimeout = 30) 
+        public async Task<int> ExecuteAsync(string commandText, int? commandTimeout = null, CancellationToken cancellation = default)
+            => await _connection.ExecuteAsync(commandText, commandTimeout, transaction: _transaction, cancellation: cancellation);
+        public async Task<T> FirstOrDefaultAsync<T>(string commandText, int? commandTimeout = null, CancellationToken cancellation = default)
+            => await _connection.FirstOrDefaultAsync<T>(commandText, commandTimeout, transaction: _transaction, cancellation: cancellation);
+        public async Task<T> SingleAsync<T>(string commandText, int? commandTimeout = null, CancellationToken cancellation = default)
+            => await _connection.SingleAsync<T>(commandText, commandTimeout, transaction: _transaction, cancellation: cancellation);
+
+        public async Task CommitAsync(CancellationToken cancellation = default)
         {
-            OpenIfClosed();
-            return new SqlQuery<T>(command, this) { CommandTimeout = commandTimeout };
+            var transaction = _transaction ?? throw new InvalidOperationException($"No transaction active. Call {nameof(BeginTransactionAsync)} first.");
+            await transaction.CommitAsync(cancellation);
+            _transaction = null;
         }
 
-        public int ExecuteSqlCommand(string commandText)
-        {
-            OpenIfClosed();
-            using (var command = CreateCommand())
-            {
-                command.CommandText = commandText;
-                return command.ExecuteNonQuery();
-            }
-        }
-
-        public IDbCommand CreateCommand()
-        {
-            OpenIfClosed();
-            var command = Connection.CreateCommand();
-            command.Transaction = Transaction;
-            return command;
-        }
-
-        public void Commit()
-        {
-            Transaction.Commit();
-            Transaction = null;
-        }
-
-        public MigratorDatabase Clone() => new MigratorDatabase(new SqlConnection(ConnectionString));
+        public MigratorDatabase Clone() => new MigratorDatabase(_connectionString);
         
-        private void OpenIfClosed()
+        private Task OpenIfClosedAsync(CancellationToken cancellation = default)
         {
-            if (Connection.State != ConnectionState.Closed)
-                return;
+            if (_connection.State != ConnectionState.Closed)
+                return Task.CompletedTask;
 
-            Connection.Open();
+            return _connection.OpenAsync(cancellation);
         }
 
         public void Dispose()
         {
-            Connection?.Dispose();
-            Transaction?.Dispose();
+            _connection.Dispose();
+            _transaction?.Dispose();
         }
     }
 }

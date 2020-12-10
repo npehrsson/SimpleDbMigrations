@@ -1,4 +1,6 @@
-﻿using Microsoft.Data.SqlClient;
+﻿using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
 
 namespace SimpleDbMigrations
 {
@@ -6,8 +8,8 @@ namespace SimpleDbMigrations
     {
         private const string DatabaseVersionTableName = "DatabaseVersion";
         private const string DatabaseVersionColumnName = "Version";
-        private const string DefaultSchema = "dbo";
-        private const int ThereIsAlreadyAnObjectNamedXXXXInTheDatabase = 2714;
+        public const string DefaultSchema = "dbo";
+        private const int ThereIsAlreadyAnObjectNamedXxxInTheDatabase = 2714;
         private const int SecondsToWaitOnFetchingTheDatabaseVersion = 240;
 
         public DatabaseVersionTable(string schemaName)
@@ -26,75 +28,67 @@ namespace SimpleDbMigrations
         public string IfExistsCurrentVersionQuery => $@"IF OBJECT_ID('{TableName}', 'U') IS NULL    SELECT NULL ELSE    {CurrentVersionQuery};";
         private string TableName => (HasSchema ? $"{SchemaName}." : string.Empty) + DatabaseVersionTableName;
 
-        public void CreateIfNotExisting(MigratorDatabase migratorDatabase)
+        public async Task CreateIfNotExistingAsync(MigratorDatabase database, CancellationToken cancellation = default)
         {
-            if (!Exists(migratorDatabase))
+            if (!await ExistsAsync(database, cancellation))
             {
-                Create(migratorDatabase);
+                await CreateAsync(database, cancellation);
             }
         }
 
-        public long GetCurrentVersion(MigratorDatabase migratorDatabase)
-        {
-            return migratorDatabase.SqlQuery<long>(CurrentVersionQuery, SecondsToWaitOnFetchingTheDatabaseVersion).FirstOrDefault();
-        }
+        public async Task<long> GetCurrentVersionAsync(MigratorDatabase database, CancellationToken cancellation = default)
+            => await database.FirstOrDefaultAsync<long>(CurrentVersionQuery, SecondsToWaitOnFetchingTheDatabaseVersion, cancellation);
 
-        public long GetCurrentVersionWithLock(MigratorDatabase migratorDatabase)
-        {
-            return migratorDatabase.SqlQuery<long>(CurrentVersionQuery + " WITH (UPDLOCK, TABLOCK)", SecondsToWaitOnFetchingTheDatabaseVersion).FirstOrDefault();
-        }
+        public async Task<long> GetCurrentVersionWithLockAsync(MigratorDatabase database, CancellationToken cancellation = default)
+            => await database.FirstOrDefaultAsync<long>(CurrentVersionQuery + " WITH (UPDLOCK, TABLOCK)", SecondsToWaitOnFetchingTheDatabaseVersion, cancellation);
 
-        public void SetVersion(MigratorDatabase migratorDatabase, long version)
+        public async Task SetVersionAsync(MigratorDatabase database, long version, CancellationToken cancellation = default)
         {
-            if (migratorDatabase.ExecuteSqlCommand($"UPDATE {TableName} SET {DatabaseVersionColumnName} = {version}") == 0)
+            if (await database.ExecuteAsync($"UPDATE {TableName} SET {DatabaseVersionColumnName} = {version}", cancellation: cancellation) == 0)
             {
-                migratorDatabase.ExecuteSqlCommand($"INSERT INTO {TableName}(Version) VALUES({version})");
+                await database.ExecuteAsync($"INSERT INTO {TableName}(Version) VALUES({version})", cancellation: cancellation);
             }
         }
 
-        public bool Exists(MigratorDatabase migratorDatabase)
+        public async Task<bool> ExistsAsync(MigratorDatabase database, CancellationToken cancellation = default)
         {
-            return 0 != migratorDatabase.SqlQuery<int>($@"
+            return 0 != await database.SingleAsync<int>($@"
                     SELECT Count(*) FROM sys.tables AS tables
                     JOIN sys.schemas AS schemas on tables.schema_id = schemas.schema_id
-                    WHERE concat(schemas.name, '.', tables.name) = '{TableName}' AND type = 'U'").Single();
+                    WHERE concat(schemas.name, '.', tables.name) = '{TableName}' AND type = 'U'", cancellation: cancellation);
         }
 
-        private void CreateSchemaIfNotExisting(MigratorDatabase migratorDatabase)
+        private async Task CreateSchemaIfNotExistingAsync(MigratorDatabase database, CancellationToken cancellation = default)
         {
-            var schemaCount = migratorDatabase.SqlQuery<int>($@"
+            var schemaCount = await database.SingleAsync<int>($@"
                     SELECT Count(schema_name) 
                     FROM information_schema.schemata 
-                    WHERE schema_name = '{SchemaName}'").Single();
+                    WHERE schema_name = '{SchemaName}'", cancellation: cancellation);
 
             if (schemaCount == 1)
-            {
                 return;
-            }
 
             try
             {
-                migratorDatabase.ExecuteSqlCommand($"CREATE SCHEMA {SchemaName}");
+                await database.ExecuteAsync($"CREATE SCHEMA {SchemaName}", cancellation: cancellation);
             }
-            catch (SqlException e) when (e.Number == ThereIsAlreadyAnObjectNamedXXXXInTheDatabase) { }
+            catch (SqlException e) when (e.Number == ThereIsAlreadyAnObjectNamedXxxInTheDatabase) { }
         }
 
-        private void Create(MigratorDatabase migratorDatabase)
+        private async Task CreateAsync(MigratorDatabase database, CancellationToken cancellation = default)
         {
             if (HasSchema)
-            {
-                CreateSchemaIfNotExisting(migratorDatabase);
-            }
-            
+                await CreateSchemaIfNotExistingAsync(database, cancellation);
+
             try
             {
-                migratorDatabase.ExecuteSqlCommand($@"
+                await database.ExecuteAsync($@"
                     CREATE TABLE {TableName} (
                         Id UNIQUEIDENTIFIER DEFAULT NEWID() PRIMARY KEY CLUSTERED,
                         [Version] BIGINT
-                    )");
+                    )", cancellation: cancellation);
             }
-            catch (SqlException e) when (e.Number == ThereIsAlreadyAnObjectNamedXXXXInTheDatabase)
+            catch (SqlException e) when (e.Number == ThereIsAlreadyAnObjectNamedXxxInTheDatabase)
             {
             }
         }

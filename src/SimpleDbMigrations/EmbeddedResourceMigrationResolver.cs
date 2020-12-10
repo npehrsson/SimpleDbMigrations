@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace SimpleDbMigrations
 {
@@ -18,11 +20,13 @@ namespace SimpleDbMigrations
             _manifestPath = manifestPath ?? throw new ArgumentNullException(nameof(manifestPath));
         }
 
-        public EmbeddedResourceMigrationResolver(Type type)
+        public EmbeddedResourceMigrationResolver(Type type, string? manifestSubPath = null)
         {
             if (type == null) throw new ArgumentNullException(nameof(type));
             _assembly = type.Assembly;
-            _manifestPath = type.Namespace;
+            _manifestPath = type.Namespace ?? throw new InvalidOperationException("Type does not have namespace.");
+            if (manifestSubPath != null)
+                _manifestPath += "." + manifestSubPath;
         }
 
         public IList<Migration> Resolve()
@@ -31,9 +35,15 @@ namespace SimpleDbMigrations
                 .GetManifestResourceNames()
                 .Where(x => x.IndexOf(_manifestPath, StringComparison.OrdinalIgnoreCase) > -1
                             && x.EndsWith(".sql", StringComparison.OrdinalIgnoreCase))
-                .Select(x => new ResourceMigration(_assembly, x, GetFileVersion(x), IsTransactionDisabled(x)) as Migration)
+                .Select(x => new TextMigration(GetFileVersion(x), IsTransactionDisabled(x), () => ReadToEndAsync(x)) as Migration)
                 .OrderBy(x => x.Version)
                 .ToList();
+        }
+
+        private async Task<string> ReadToEndAsync(string resourceName)
+        {
+            using var streamReader = new StreamReader(_assembly.GetManifestResourceStream(resourceName) ?? throw new InvalidOperationException($"No such resource found: {resourceName}"));
+            return await streamReader.ReadToEndAsync();
         }
 
         private bool IsTransactionDisabled(string name) =>  name.EndsWith("disable-transaction.sql", StringComparison.InvariantCultureIgnoreCase);
