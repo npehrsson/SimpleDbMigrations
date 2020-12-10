@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <Nullable>enable</Nullable>
+
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="MigrationFixtures\001.sql" />
+    <None Remove="MigrationFixtures\002.sql" />
+    <None Remove="MigrationFixtures\003-disable-transaction.sql" />
+    <None Remove="MigrationFixtures\004.sql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="MigrationFixtures\001.sql" />
+    <EmbeddedResource Include="MigrationFixtures\002.sql" />
+    <EmbeddedResource Include="MigrationFixtures\003-disable-transaction.sql" />
+    <EmbeddedResource Include="MigrationFixtures\004.sql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="2.1.0" />
+    <PackageReference Include="NUnit" Version="3.12.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="3.17.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.8.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SimpleDbMigrations\SimpleDbMigrations.csproj" />
+  </ItemGroup>
+
+</Project>

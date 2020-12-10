@@ -78,62 +78,60 @@ namespace SimpleDbMigrations
 
         private async Task<bool> MigrateNextAsync(long dbVersion, MigratorDatabase database, IList<Migration> migrations, CancellationToken cancellation = default)
         {
-            using (database.BeginTransactionAsync(cancellation))
+            using var task = await database.BeginTransactionAsync(cancellation);
+            dbVersion = await _versionTable.GetCurrentVersionWithLockAsync(database);
+
+            if (dbVersion >= _latestSchemaVersion)
+                return false;
+
+            Interceptor?.PreMigration(database.Name, dbVersion, _latestSchemaVersion);
+
+            migrations = migrations
+                .Where(x => x.Version > dbVersion)
+                .ToList();
+
+            var firstMigration = migrations.First();
+
+            if (firstMigration.DisableTransaction)
             {
-                dbVersion = await _versionTable.GetCurrentVersionWithLockAsync(database);
+                using (var noTransactionDatabase = database.Clone())
+                    await ExecuteMigrationAsync(migrations.First(), noTransactionDatabase, cancellation);
 
-                if (dbVersion >= _latestSchemaVersion)
-                    return false;
-
-                Interceptor?.PreMigration(database.Name, dbVersion, _latestSchemaVersion);
-
-                migrations = migrations
-                    .Where(x => x.Version > dbVersion)
-                    .ToList();
-
-                var firstMigration = migrations.First();
-
-                if (firstMigration.DisableTransaction)
-                {
-                    using (var noTransactionDatabase = database.Clone())
-                        await ExecuteMigrationAsync(migrations.First(), noTransactionDatabase, cancellation);
-
-                    if (firstMigration.Version > dbVersion)
-                        await _versionTable.SetVersionAsync(database, firstMigration.Version, cancellation);
-
-                    await database.CommitAsync(cancellation);
-
-                    if (migrations.Count == 1)
-                    {
-                        Interceptor?.PostMigration(database.Name, dbVersion, _latestSchemaVersion);
-                        return false;
-                    }
-
-                    return true;
-                }
-
-                foreach (var migration in migrations)
-                {
-                    cancellation.ThrowIfCancellationRequested();
-
-                    if (migration.DisableTransaction)
-                    {
-                        await database.CommitAsync(cancellation);
-                        return true;
-                    }
-
-                    await ExecuteMigrationAsync(migration, database, cancellation);
-
-                    if (migration.Version > dbVersion)
-                        await _versionTable.SetVersionAsync(database, migration.Version, cancellation);
-                }
+                if (firstMigration.Version > dbVersion)
+                    await _versionTable.SetVersionAsync(database, firstMigration.Version, cancellation);
 
                 await database.CommitAsync(cancellation);
 
-                Interceptor?.PostMigration(database.Name, dbVersion, _latestSchemaVersion);
+                if (migrations.Count == 1)
+                {
+                    Interceptor?.PostMigration(database.Name, dbVersion, _latestSchemaVersion);
+                    return false;
+                }
 
-                return false;
+                return true;
             }
+
+            foreach (var migration in migrations)
+            {
+                cancellation.ThrowIfCancellationRequested();
+
+                if (migration.DisableTransaction)
+                {
+                    await database.CommitAsync(cancellation);
+                    return true;
+                }
+
+                await ExecuteMigrationAsync(migration, database, cancellation);
+
+                if (migration.Version > dbVersion)
+                    await _versionTable.SetVersionAsync(database, migration.Version, cancellation);
+            }
+
+            await database.CommitAsync(cancellation);
+
+            Interceptor?.PostMigration(database.Name, dbVersion, _latestSchemaVersion);
+
+            return false;
         }
 
         private async Task ExecuteMigrationAsync(Migration migration, MigratorDatabase database, CancellationToken cancellation = default)

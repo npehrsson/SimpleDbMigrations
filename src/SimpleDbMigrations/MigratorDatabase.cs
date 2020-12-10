@@ -1,8 +1,10 @@
 using System;
 using System.Data;
+using System.Data.Common;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
+using SimpleDbMigrations.DbExtensions;
 
 namespace SimpleDbMigrations
 {
@@ -10,7 +12,7 @@ namespace SimpleDbMigrations
     {
         private readonly string _connectionString;
         private readonly SqlConnection _connection;
-        private SqlTransaction? _transaction;
+        private DbTransaction? _transaction;
 
         public MigratorDatabase(string connectionString)
         {
@@ -27,30 +29,15 @@ namespace SimpleDbMigrations
                 throw new InvalidOperationException("Cannot open a transaction twice");
 
             await OpenIfClosedAsync(cancellation);
-            return await _connection.BeginTransactionAsync(cancellation);
+            return _transaction = await _connection.BeginTransactionAsync(cancellation);
         }
 
-        public async Task<SqlQuery<T>> SqlQueryAsync<T>(string command, int commandTimeout = 30, CancellationToken cancellation = default) 
-        {
-            await OpenIfClosedAsync(cancellation);
-            return new SqlQuery<T>(command, this) { CommandTimeout = commandTimeout };
-        }
-
-        public async Task<int> ExecuteSqlCommandAsync(string commandText, CancellationToken cancellation = default)
-        {
-            await OpenIfClosedAsync(cancellation);
-            await using var command = await CreateCommandAsync(cancellation);
-            command.CommandText = commandText;
-            return await command.ExecuteNonQueryAsync(cancellation);
-        }
-
-        public async Task<SqlCommand> CreateCommandAsync(CancellationToken cancellation = default)
-        {
-            await OpenIfClosedAsync(cancellation);
-            var command = _connection.CreateCommand();
-            command.Transaction = _transaction;
-            return command;
-        }
+        public async Task<int> ExecuteAsync(string commandText, int? commandTimeout = null, CancellationToken cancellation = default)
+            => await _connection.ExecuteAsync(commandText, commandTimeout, transaction: _transaction, cancellation: cancellation);
+        public async Task<T> FirstOrDefaultAsync<T>(string commandText, int? commandTimeout = null, CancellationToken cancellation = default)
+            => await _connection.FirstOrDefaultAsync<T>(commandText, commandTimeout, transaction: _transaction, cancellation: cancellation);
+        public async Task<T> SingleAsync<T>(string commandText, int? commandTimeout = null, CancellationToken cancellation = default)
+            => await _connection.SingleAsync<T>(commandText, commandTimeout, transaction: _transaction, cancellation: cancellation);
 
         public async Task CommitAsync(CancellationToken cancellation = default)
         {

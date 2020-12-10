@@ -37,48 +37,40 @@ namespace SimpleDbMigrations
         }
 
         public async Task<long> GetCurrentVersionAsync(MigratorDatabase database, CancellationToken cancellation = default)
-        {
-            var cmd = await database.SqlQueryAsync<long>(CurrentVersionQuery, SecondsToWaitOnFetchingTheDatabaseVersion, cancellation);
-            return await cmd.FirstOrDefaultAsync(cancellation);
-        }
+            => await database.FirstOrDefaultAsync<long>(CurrentVersionQuery, SecondsToWaitOnFetchingTheDatabaseVersion, cancellation);
 
         public async Task<long> GetCurrentVersionWithLockAsync(MigratorDatabase database, CancellationToken cancellation = default)
-        {
-            var cmd = await database.SqlQueryAsync<long>(CurrentVersionQuery + " WITH (UPDLOCK, TABLOCK)", SecondsToWaitOnFetchingTheDatabaseVersion, cancellation);
-            return await cmd.FirstOrDefaultAsync(cancellation);
-        }
+            => await database.FirstOrDefaultAsync<long>(CurrentVersionQuery + " WITH (UPDLOCK, TABLOCK)", SecondsToWaitOnFetchingTheDatabaseVersion, cancellation);
 
         public async Task SetVersionAsync(MigratorDatabase database, long version, CancellationToken cancellation = default)
         {
-            if (await database.ExecuteSqlCommandAsync($"UPDATE {TableName} SET {DatabaseVersionColumnName} = {version}", cancellation) == 0)
+            if (await database.ExecuteAsync($"UPDATE {TableName} SET {DatabaseVersionColumnName} = {version}", cancellation: cancellation) == 0)
             {
-                await database.ExecuteSqlCommandAsync($"INSERT INTO {TableName}(Version) VALUES({version})", cancellation);
+                await database.ExecuteAsync($"INSERT INTO {TableName}(Version) VALUES({version})", cancellation: cancellation);
             }
         }
 
         public async Task<bool> ExistsAsync(MigratorDatabase database, CancellationToken cancellation = default)
         {
-            var cmd = await database.SqlQueryAsync<int>($@"
+            return 0 != await database.SingleAsync<int>($@"
                     SELECT Count(*) FROM sys.tables AS tables
                     JOIN sys.schemas AS schemas on tables.schema_id = schemas.schema_id
                     WHERE concat(schemas.name, '.', tables.name) = '{TableName}' AND type = 'U'", cancellation: cancellation);
-            return 0 != await cmd.SingleAsync(cancellation);
         }
 
         private async Task CreateSchemaIfNotExistingAsync(MigratorDatabase database, CancellationToken cancellation = default)
         {
-            var cmd = await database.SqlQueryAsync<int>($@"
+            var schemaCount = await database.SingleAsync<int>($@"
                     SELECT Count(schema_name) 
                     FROM information_schema.schemata 
                     WHERE schema_name = '{SchemaName}'", cancellation: cancellation);
-            var schemaCount = await cmd.SingleAsync(cancellation);
 
             if (schemaCount == 1)
                 return;
 
             try
             {
-                await database.ExecuteSqlCommandAsync($"CREATE SCHEMA {SchemaName}", cancellation);
+                await database.ExecuteAsync($"CREATE SCHEMA {SchemaName}", cancellation: cancellation);
             }
             catch (SqlException e) when (e.Number == ThereIsAlreadyAnObjectNamedXxxInTheDatabase) { }
         }
@@ -90,11 +82,11 @@ namespace SimpleDbMigrations
 
             try
             {
-                await database.ExecuteSqlCommandAsync($@"
+                await database.ExecuteAsync($@"
                     CREATE TABLE {TableName} (
                         Id UNIQUEIDENTIFIER DEFAULT NEWID() PRIMARY KEY CLUSTERED,
                         [Version] BIGINT
-                    )", cancellation);
+                    )", cancellation: cancellation);
             }
             catch (SqlException e) when (e.Number == ThereIsAlreadyAnObjectNamedXxxInTheDatabase)
             {
